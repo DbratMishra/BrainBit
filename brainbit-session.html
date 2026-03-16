@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroSession — BrainBit EEG</title>
+
+<!-- BrainBit Web SDK from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/web-neurosdk-brainbit/dist/brainbit.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg:        #080e18;
+    --surface:   #0d1626;
+    --border:    #1a2a45;
+    --text:      #c8d8f0;
+    --muted:     #4a6080;
+    --accent:    #00e5b0;
+    --accent2:   #00aaff;
+    --amber:     #ffb740;
+    --red:       #ff4d6d;
+
+    --ch-o1:  #00e5b0;
+    --ch-o2:  #00aaff;
+    --ch-t3:  #c97bff;
+    --ch-t4:  #ff7b8c;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ─────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: 0.04em;
+    color: #fff;
+  }
+  .logo span { color: var(--accent); }
+
+  .session-clock {
+    font-size: 22px;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    min-width: 90px;
+    text-align: center;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 16px; }
+
+  .status-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: none;
+    transition: background 0.4s, box-shadow 0.4s;
+  }
+  .status-dot.connected {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 6px var(--accent); }
+    50%      { box-shadow: 0 0 18px var(--accent); }
+  }
+
+  .status-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+
+  /* ── BUTTONS ─────────────────────────────────────────────── */
+  button {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 8px 18px;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #050b14;
+    font-weight: 700;
+  }
+  .btn-primary:hover { background: #00ffca; transform: translateY(-1px); }
+  .btn-primary:disabled { background: var(--muted); color: var(--bg); cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-ghost:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid var(--red);
+  }
+  .btn-danger:hover { background: var(--red); color: #fff; }
+
+  /* ── LAYOUT ──────────────────────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    grid-template-rows: auto 1fr auto;
+    gap: 0;
+    height: calc(100vh - 62px);
+  }
+
+  /* ── TOOLBAR ─────────────────────────────────────────────── */
+  .toolbar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .toolbar-sep { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
+
+  .gain-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .gain-value { color: var(--accent); min-width: 28px; text-align: right; }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 90px; height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  /* ── EEG PANEL ───────────────────────────────────────────── */
+  .eeg-panel {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 24px 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow: hidden;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .channel-row {
+    display: grid;
+    grid-template-columns: 32px 1fr 60px;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+  }
+
+  .ch-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-align: right;
+  }
+  .ch-label.o1 { color: var(--ch-o1); }
+  .ch-label.o2 { color: var(--ch-o2); }
+  .ch-label.t3 { color: var(--ch-t3); }
+  .ch-label.t4 { color: var(--ch-t4); }
+
+  canvas.wave {
+    width: 100%;
+    height: 60px;
+    display: block;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+  }
+
+  .ch-val {
+    font-size: 10px;
+    color: var(--muted);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── RIGHT SIDEBAR ───────────────────────────────────────── */
+  .sidebar {
+    grid-column: 2;
+    grid-row: 2 / 4;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Topography section */
+  .topo-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .topo-wrap {
+    margin-top: 12px;
+    display: flex;
+    justify-content: center;
+  }
+
+  #topoSvg {
+    width: 200px;
+    height: 200px;
+  }
+
+  /* Legend */
+  .topo-legend {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding: 0 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Resistance section */
+  .resist-section {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .resist-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .resist-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 10px;
+  }
+
+  .resist-ch { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; }
+  .resist-ch.o1 { color: var(--ch-o1); }
+  .resist-ch.o2 { color: var(--ch-o2); }
+  .resist-ch.t3 { color: var(--ch-t3); }
+  .resist-ch.t4 { color: var(--ch-t4); }
+  .resist-val { font-size: 12px; margin-top: 2px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .resist-bar { height: 3px; border-radius: 2px; margin-top: 5px; background: var(--border); overflow: hidden; }
+  .resist-fill { height: 100%; border-radius: 2px; transition: width 0.5s, background 0.5s; }
+
+  /* ── MARKER SECTION ──────────────────────────────────────── */
+  .marker-section {
+    padding: 14px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .marker-input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  input[type=text] {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type=text]:focus { border-color: var(--accent); }
+  input[type=text]::placeholder { color: var(--muted); }
+
+  .btn-marker {
+    background: var(--amber);
+    color: #1a0f00;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 4px;
+    padding: 7px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .btn-marker:hover { background: #ffd080; transform: translateY(-1px); }
+  .btn-marker:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+  /* Quick marker buttons */
+  .quick-markers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .qm-btn {
+    background: rgba(255,183,64,0.1);
+    border: 1px solid rgba(255,183,64,0.3);
+    color: var(--amber);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .qm-btn:hover { background: rgba(255,183,64,0.25); }
+  .qm-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .marker-log {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .marker-log::-webkit-scrollbar { width: 4px; }
+  .marker-log::-webkit-scrollbar-track { background: transparent; }
+  .marker-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .marker-entry {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 11px;
+    padding: 5px 8px;
+    background: rgba(255,183,64,0.07);
+    border-left: 2px solid var(--amber);
+    border-radius: 0 3px 3px 0;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+
+  .marker-time { color: var(--amber); font-size: 10px; white-space: nowrap; }
+  .marker-text { color: var(--text); }
+
+  /* ── STATUS BAR ──────────────────────────────────────────── */
+  .statusbar {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 10px 28px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface);
+  }
+  .statusbar .stat { display: flex; gap: 6px; align-items: center; }
+  .statusbar .stat-val { color: var(--text); font-variant-numeric: tabular-nums; }
+
+  /* ── CONNECT OVERLAY ─────────────────────────────────────── */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(5,11,20,0.92);
+    backdrop-filter: blur(8px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 100;
+    transition: opacity 0.4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .overlay-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px 48px;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+  }
+
+  .overlay-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .overlay-sub { color: var(--muted); font-size: 12px; line-height: 1.7; margin-bottom: 28px; }
+
+  .brain-icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 24px;
+    display: block;
+    animation: floatIcon 3s ease-in-out infinite;
+  }
+  @keyframes floatIcon {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  #connectMsg {
+    font-size: 11px;
+    color: var(--muted);
+    min-height: 18px;
+    margin-top: 12px;
+    letter-spacing: 0.06em;
+  }
+  #connectMsg.error { color: var(--red); }
+
+  .https-warn {
+    font-size: 10px;
+    color: var(--amber);
+    padding: 8px 14px;
+    border: 1px solid rgba(255,183,64,0.3);
+    border-radius: 4px;
+    background: rgba(255,183,64,0.06);
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── CONNECT OVERLAY ──────────────────────────────────── -->
+<div id="overlay">
+  <div class="overlay-card">
+    <svg class="brain-icon" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="36" cy="36" r="35" stroke="#1a2a45" stroke-width="2"/>
+      <path d="M22 38c0-7.7 6.3-14 14-14s14 6.3 14 14c0 4.2-1.8 7.9-4.7 10.5" stroke="#00e5b0" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M22 38c0 4.2 1.8 7.9 4.7 10.5" stroke="#00aaff" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="36" cy="24" r="3" fill="#00e5b0" opacity="0.6"/>
+      <circle cx="22" cy="38" r="3" fill="#c97bff" opacity="0.8"/>
+      <circle cx="50" cy="38" r="3" fill="#ff7b8c" opacity="0.8"/>
+      <circle cx="31.3" cy="48.5" r="3" fill="#00e5b0" opacity="0.8"/>
+      <circle cx="40.7" cy="48.5" r="3" fill="#00aaff" opacity="0.8"/>
+      <!-- signal lines -->
+      <line x1="22" y1="38" x2="28" y2="34" stroke="#c97bff" stroke-width="1" opacity="0.5"/>
+      <line x1="50" y1="38" x2="44" y2="34" stroke="#ff7b8c" stroke-width="1" opacity="0.5"/>
+      <line x1="31.3" y1="48.5" x2="33" y2="42" stroke="#00e5b0" stroke-width="1" opacity="0.5"/>
+      <line x1="40.7" y1="48.5" x2="39" y2="42" stroke="#00aaff" stroke-width="1" opacity="0.5"/>
+    </svg>
+
+    <div class="overlay-title">NeuroSession</div>
+    <div class="overlay-sub">Live EEG practice monitoring<br>with scalp topography · BrainBit SDK</div>
+
+    <div class="https-warn" id="httpsWarn" style="display:none;margin-bottom:16px;">
+      ⚠ Web Bluetooth requires HTTPS or localhost.<br>
+      Serve this file via a local HTTPS server.
+    </div>
+
+    <button class="btn-primary" id="btnConnect" style="width:100%;padding:14px;font-size:13px;">
+      Connect BrainBit
+    </button>
+    <div id="connectMsg"></div>
+  </div>
+</div>
+
+<!-- ── HEADER ──────────────────────────────────────────────── -->
+<header>
+  <div class="logo">Neuro<span>Session</span></div>
+  <div class="session-clock" id="sessionClock">00:00</div>
+  <div class="header-right">
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-label" id="statusLabel">Disconnected</div>
+    <button class="btn-ghost" id="btnEEG" disabled>▶ Start EEG</button>
+    <button class="btn-danger" id="btnDisconnect" disabled>Disconnect</button>
+  </div>
+</header>
+
+<main>
+  <!-- ── TOOLBAR ── -->
+  <div class="toolbar">
+    <span class="gain-label">Amplitude ×</span>
+    <input type="range" id="gainSlider" min="1" max="20" value="5" step="0.5">
+    <span class="gain-value" id="gainVal">5</span>
+    <div class="toolbar-sep"></div>
+    <span class="gain-label">Sweep</span>
+    <input type="range" id="sweepSlider" min="2" max="10" value="5" step="1">
+    <span class="gain-value" id="sweepVal">5s</span>
+    <div class="toolbar-sep"></div>
+    <span class="gain-label">Samples: </span>
+    <span class="gain-value" id="sampleCount">0</span>
+    <div class="toolbar-sep"></div>
+    <span class="gain-label">Rate: </span>
+    <span class="gain-value" id="sampleRate">— Hz</span>
+  </div>
+
+  <!-- ── EEG WAVEFORMS ── -->
+  <div class="eeg-panel">
+    <div class="section-title">EEG Channels — 4ch · O1 O2 T3 T4</div>
+
+    <div class="channel-row">
+      <div class="ch-label o1">O1</div>
+      <canvas class="wave" id="waveO1"></canvas>
+      <div class="ch-val" id="valO1">—</div>
+    </div>
+    <div class="channel-row">
+      <div class="ch-label o2">O2</div>
+      <canvas class="wave" id="waveO2"></canvas>
+      <div class="ch-val" id="valO2">—</div>
+    </div>
+    <div class="channel-row">
+      <div class="ch-label t3">T3</div>
+      <canvas class="wave" id="waveT3"></canvas>
+      <div class="ch-val" id="valT3">—</div>
+    </div>
+    <div class="channel-row">
+      <div class="ch-label t4">T4</div>
+      <canvas class="wave" id="waveT4"></canvas>
+      <div class="ch-val" id="valT4">—</div>
+    </div>
+  </div>
+
+  <!-- ── STATUS BAR ── -->
+  <div class="statusbar">
+    <div class="stat">DEVICE <span class="stat-val" id="deviceModel">—</span></div>
+    <div class="stat">FW <span class="stat-val" id="deviceFW">—</span></div>
+    <div class="stat">STATE <span class="stat-val" id="deviceState">—</span></div>
+    <div class="stat">MARKERS <span class="stat-val" id="markerCount">0</span></div>
+  </div>
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <!-- Topography -->
+    <div class="topo-section">
+      <div class="section-title">Scalp Topography</div>
+      <div class="topo-wrap">
+        <svg id="topoSvg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <!-- Radial gradients for each electrode -->
+            <radialGradient id="gO1" cx="38%" cy="72%" r="38%">
+              <stop offset="0%" stop-color="#00e5b0" stop-opacity="0.9" id="gO1stop"/>
+              <stop offset="100%" stop-color="#00e5b0" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="gO2" cx="62%" cy="72%" r="38%">
+              <stop offset="0%" stop-color="#00aaff" stop-opacity="0.9" id="gO2stop"/>
+              <stop offset="100%" stop-color="#00aaff" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="gT3" cx="14%" cy="50%" r="38%">
+              <stop offset="0%" stop-color="#c97bff" stop-opacity="0.9" id="gT3stop"/>
+              <stop offset="100%" stop-color="#c97bff" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="gT4" cx="86%" cy="50%" r="38%">
+              <stop offset="0%" stop-color="#ff7b8c" stop-opacity="0.9" id="gT4stop"/>
+              <stop offset="100%" stop-color="#ff7b8c" stop-opacity="0" />
+            </radialGradient>
+            <clipPath id="headClip">
+              <ellipse cx="100" cy="100" rx="82" ry="88"/>
+            </clipPath>
+          </defs>
+
+          <!-- Head shape -->
+          <ellipse cx="100" cy="100" rx="82" ry="88" fill="#0d1626" stroke="#1a2a45" stroke-width="1.5"/>
+
+          <!-- Nose indicator -->
+          <path d="M95 14 Q100 8 105 14" fill="none" stroke="#1a2a45" stroke-width="1.5" stroke-linecap="round"/>
+
+          <!-- Ear indicators -->
+          <path d="M18 100 Q13 95 13 100 Q13 105 18 100" fill="none" stroke="#1a2a45" stroke-width="1.5"/>
+          <path d="M182 100 Q187 95 187 100 Q187 105 182 100" fill="none" stroke="#1a2a45" stroke-width="1.5"/>
+
+          <!-- Topo colour blobs (clipped to head) -->
+          <g clip-path="url(#headClip)">
+            <ellipse cx="76" cy="144" rx="68" ry="68" fill="url(#gO1)" id="blobO1"/>
+            <ellipse cx="124" cy="144" rx="68" ry="68" fill="url(#gO2)" id="blobO2"/>
+            <ellipse cx="28" cy="100" rx="68" ry="68" fill="url(#gT3)" id="blobT3"/>
+            <ellipse cx="172" cy="100" rx="68" ry="68" fill="url(#gT4)" id="blobT4"/>
+          </g>
+
+          <!-- Grid lines (faint) -->
+          <line x1="100" y1="12" x2="100" y2="188" stroke="#1a2a45" stroke-width="0.5" opacity="0.6"/>
+          <line x1="18" y1="100" x2="182" y2="100" stroke="#1a2a45" stroke-width="0.5" opacity="0.6"/>
+          <ellipse cx="100" cy="100" rx="50" ry="50" fill="none" stroke="#1a2a45" stroke-width="0.5" opacity="0.5"/>
+
+          <!-- Electrode markers -->
+          <circle cx="76" cy="144" r="7" fill="#0d1626" stroke="#00e5b0" stroke-width="1.5" id="dotO1"/>
+          <text x="76" y="148" text-anchor="middle" fill="#00e5b0" font-family="Space Mono,monospace" font-size="7" font-weight="700">O1</text>
+
+          <circle cx="124" cy="144" r="7" fill="#0d1626" stroke="#00aaff" stroke-width="1.5" id="dotO2"/>
+          <text x="124" y="148" text-anchor="middle" fill="#00aaff" font-family="Space Mono,monospace" font-size="7" font-weight="700">O2</text>
+
+          <circle cx="28" cy="100" r="7" fill="#0d1626" stroke="#c97bff" stroke-width="1.5" id="dotT3"/>
+          <text x="28" y="104" text-anchor="middle" fill="#c97bff" font-family="Space Mono,monospace" font-size="7" font-weight="700">T3</text>
+
+          <circle cx="172" cy="100" r="7" fill="#0d1626" stroke="#ff7b8c" stroke-width="1.5" id="dotT4"/>
+          <text x="172" y="104" text-anchor="middle" fill="#ff7b8c" font-family="Space Mono,monospace" font-size="7" font-weight="700">T4</text>
+
+          <!-- Centre cross -->
+          <circle cx="100" cy="100" r="2.5" fill="#1a2a45" stroke="#2a3a55" stroke-width="1"/>
+        </svg>
+      </div>
+
+      <div class="topo-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--ch-o1)"></div>O1 Occ-L</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--ch-o2)"></div>O2 Occ-R</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--ch-t3)"></div>T3 Temp-L</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--ch-t4)"></div>T4 Temp-R</div>
+      </div>
+    </div>
+
+    <!-- Resistance -->
+    <div class="resist-section">
+      <div class="section-title">Electrode Contact</div>
+      <div class="resist-grid">
+        <div class="resist-item">
+          <div class="resist-ch o1">O1</div>
+          <div class="resist-val" id="rO1">—</div>
+          <div class="resist-bar"><div class="resist-fill" id="rO1bar" style="width:0;background:var(--ch-o1)"></div></div>
+        </div>
+        <div class="resist-item">
+          <div class="resist-ch o2">O2</div>
+          <div class="resist-val" id="rO2">—</div>
+          <div class="resist-bar"><div class="resist-fill" id="rO2bar" style="width:0;background:var(--ch-o2)"></div></div>
+        </div>
+        <div class="resist-item">
+          <div class="resist-ch t3">T3</div>
+          <div class="resist-val" id="rT3">—</div>
+          <div class="resist-bar"><div class="resist-fill" id="rT3bar" style="width:0;background:var(--ch-t3)"></div></div>
+        </div>
+        <div class="resist-item">
+          <div class="resist-ch t4">T4</div>
+          <div class="resist-val" id="rT4">—</div>
+          <div class="resist-bar"><div class="resist-fill" id="rT4bar" style="width:0;background:var(--ch-t4)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Markers -->
+    <div class="marker-section">
+      <div class="section-title">Event Markers</div>
+      <div class="quick-markers">
+        <button class="qm-btn" id="qm1" disabled onclick="injectQuickMarker('PRACTICE_START')">Practice Start</button>
+        <button class="qm-btn" id="qm2" disabled onclick="injectQuickMarker('BREATH')">Breath</button>
+        <button class="qm-btn" id="qm3" disabled onclick="injectQuickMarker('FOCUS')">Focus</button>
+        <button class="qm-btn" id="qm4" disabled onclick="injectQuickMarker('RELAX')">Relax</button>
+        <button class="qm-btn" id="qm5" disabled onclick="injectQuickMarker('DISTRACT')">Distraction</button>
+      </div>
+      <div class="marker-input-row">
+        <input type="text" id="markerInput" placeholder="Custom event label…" maxlength="40">
+        <button class="btn-marker" id="btnMarker" disabled onclick="injectMarker()">Mark</button>
+      </div>
+      <div class="marker-log" id="markerLog"></div>
+    </div>
+
+  </aside>
+</main>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────
+let client = null;
+let eegStreaming = false;
+let sessionStart = null;
+let sessionTimer = null;
+let markerCount = 0;
+let sampleTotal = 0;
+let rateTimer = null;
+let samplesInWindow = 0;
+
+const GAIN_DEFAULT = 5;
+let gain = GAIN_DEFAULT;
+let sweepSec = 5;
+const SR = 250; // BrainBit sample rate
+let bufferSize;
+
+// Per-channel ring buffers
+const channels = ['O1','O2','T3','T4'];
+const buffers  = { O1: null, O2: null, T3: null, T4: null };
+const writePos = { O1: 0,    O2: 0,    T3: 0,    T4: 0   };
+
+function initBuffers() {
+  bufferSize = SR * sweepSec;
+  channels.forEach(ch => {
+    buffers[ch] = new Float32Array(bufferSize);
+    writePos[ch] = 0;
+  });
+}
+initBuffers();
+
+// Canvas contexts
+const ctxs = {};
+channels.forEach(ch => {
+  const canvas = document.getElementById('wave' + ch);
+  ctxs[ch] = canvas.getContext('2d');
+});
+
+const COLORS = { O1: '#00e5b0', O2: '#00aaff', T3: '#c97bff', T4: '#ff7b8c' };
+
+// ── CANVAS SIZING ─────────────────────────────────────────
+function resizeCanvases() {
+  channels.forEach(ch => {
+    const canvas = document.getElementById('wave' + ch);
+    canvas.width  = canvas.offsetWidth  * devicePixelRatio;
+    canvas.height = canvas.offsetHeight * devicePixelRatio;
+    ctxs[ch].scale(devicePixelRatio, devicePixelRatio);
+  });
+}
+window.addEventListener('resize', () => { resizeCanvases(); });
+setTimeout(resizeCanvases, 100);
+
+// ── WAVEFORM DRAW LOOP ────────────────────────────────────
+function drawWave(ch) {
+  const canvas = document.getElementById('wave' + ch);
+  const ctx = ctxs[ch];
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // zero line
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  ctx.moveTo(0, H/2); ctx.lineTo(W, H/2);
+  ctx.stroke();
+
+  const buf = buffers[ch];
+  if (!buf) return;
+
+  const n = bufferSize;
+  const color = COLORS[ch];
+
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 4;
+
+  for (let i = 0; i < n; i++) {
+    const idx = (writePos[ch] + i) % n;
+    const x = (i / n) * W;
+    const rawV = buf[idx]; // in volts
+    const scaled = rawV * gain * 1e5;
+    const y = H/2 - (scaled * H/2);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // scan line (write head)
+  const scanX = ((writePos[ch]) / n) * W;
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.moveTo(scanX, 0); ctx.lineTo(scanX, H);
+  ctx.stroke();
+}
+
+// ── TOPO UPDATER ──────────────────────────────────────────
+// Maps RMS amplitude → opacity of gradient blob
+const rmsWindow = { O1: [], O2: [], T3: [], T4: [] };
+const RMS_WIN = 125; // ~0.5s
+
+function updateRMS(ch, val) {
+  const w = rmsWindow[ch];
+  w.push(val * val);
+  if (w.length > RMS_WIN) w.shift();
+  const rms = Math.sqrt(w.reduce((a,b)=>a+b,0) / w.length);
+  // Map rms (typically 0–1e-5 V range) to 0–1 opacity
+  const norm = Math.min(rms * 1e5 * 0.6, 1);
+  const stopEl = document.getElementById('g' + ch + 'stop');
+  if (stopEl) stopEl.setAttribute('stop-opacity', Math.max(0.08, norm).toFixed(3));
+}
+
+// ── RENDER LOOP ───────────────────────────────────────────
+function renderLoop() {
+  channels.forEach(ch => drawWave(ch));
+  requestAnimationFrame(renderLoop);
+}
+renderLoop();
+
+// ── RESISTANCE DISPLAY ────────────────────────────────────
+const MAX_RESIST = 500000; // 500kΩ = bad, 0 = perfect
+
+function updateResistance(data) {
+  // data object has O1, O2, T3, T4 in ohms (or may be keyed differently)
+  const chMap = { O1: 'O1', O2: 'O2', T3: 'T3', T4: 'T4' };
+  const keys = Object.keys(data);
+
+  keys.forEach((k, i) => {
+    const ch = channels[i]; // map by position
+    const val = data[k];
+    if (val === undefined || val === null) return;
+    const kΩ = (val / 1000).toFixed(1);
+    document.getElementById('r' + ch).textContent = kΩ + ' kΩ';
+    // bar: inverted (lower R = better contact = fuller bar)
+    const pct = Math.max(0, Math.min(100, (1 - val / MAX_RESIST) * 100));
+    const bar = document.getElementById('r' + ch + 'bar');
+    bar.style.width = pct + '%';
+    // colour: green if < 50kΩ, amber < 150kΩ, red otherwise
+    bar.style.background = val < 50000 ? COLORS[ch] :
+                           val < 150000 ? '#ffb740' : '#ff4d6d';
+  });
+}
+
+// ── SESSION CLOCK ─────────────────────────────────────────
+function startClock() {
+  sessionStart = Date.now();
+  sessionTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+    const m = String(Math.floor(elapsed/60)).padStart(2,'0');
+    const s = String(elapsed % 60).padStart(2,'0');
+    document.getElementById('sessionClock').textContent = m + ':' + s;
+  }, 1000);
+}
+
+// ── SAMPLE RATE MONITOR ───────────────────────────────────
+function startRateMonitor() {
+  rateTimer = setInterval(() => {
+    document.getElementById('sampleRate').textContent = samplesInWindow + ' Hz';
+    samplesInWindow = 0;
+  }, 1000);
+}
+
+// ── CONNECT ───────────────────────────────────────────────
+document.getElementById('btnConnect').addEventListener('click', async () => {
+  const msg = document.getElementById('connectMsg');
+  const btn = document.getElementById('btnConnect');
+
+  // Check for HTTPS / localhost
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    document.getElementById('httpsWarn').style.display = 'block';
+    msg.textContent = 'HTTPS required for Web Bluetooth.';
+    msg.className = 'error';
+    return;
+  }
+
+  if (!navigator.bluetooth) {
+    msg.textContent = 'Web Bluetooth not supported in this browser.';
+    msg.className = 'error';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = 'Scanning for BrainBit…';
+  msg.className = '';
+
+  try {
+    // BrainbitClient is loaded from the CDN script
+    const BrainbitClient = window.BrainbitClient || (window.brainbit && window.brainbit.default);
+    if (!BrainbitClient) throw new Error('BrainBit SDK not loaded. Check CDN.');
+
+    client = new BrainbitClient();
+
+    client.connectionStatus.subscribe(status => {
+      document.getElementById('statusDot').className = 'status-dot' + (status ? ' connected' : '');
+      document.getElementById('statusLabel').textContent = status ? 'Connected' : 'Disconnected';
+      if (!status && eegStreaming) { eegStreaming = false; updateEEGButton(); }
+    });
+
+    await client.connect();
+
+    msg.textContent = 'Connected!';
+
+    // Get device info
+    try {
+      const info = await client.deviceInfo();
+      document.getElementById('deviceModel').textContent  = info.model  || '—';
+      document.getElementById('deviceFW').textContent     = info.firmwareVersion || '—';
+      document.getElementById('deviceState').textContent  = info.state  || '—';
+    } catch(e) { /* non-fatal */ }
+
+    // Subscribe to resistance
+    client.resistanceData.subscribe(data => {
+      if (data) updateResistance(data);
+    });
+
+    // Subscribe to event markers (echo back)
+    client.eventMarkers.subscribe(event => {
+      if (event) logMarker(event.value || event, event.timestamp);
+    });
+
+    // Enable UI
+    ['btnEEG','btnDisconnect','btnMarker','qm1','qm2','qm3','qm4','qm5']
+      .forEach(id => document.getElementById(id).disabled = false);
+
+    // Hide overlay
+    const overlay = document.getElementById('overlay');
+    overlay.classList.add('hidden');
+    setTimeout(() => overlay.style.display='none', 500);
+
+  } catch (err) {
+    msg.textContent = 'Error: ' + (err.message || err);
+    msg.className = 'error';
+    btn.disabled = false;
+    client = null;
+  }
+});
+
+// ── EEG TOGGLE ────────────────────────────────────────────
+document.getElementById('btnEEG').addEventListener('click', async () => {
+  if (!client) return;
+  const btn = document.getElementById('btnEEG');
+  btn.disabled = true;
+
+  if (!eegStreaming) {
+    try {
+      initBuffers(); // reset buffers on new stream
+      await client.startEEGStream();
+      eegStreaming = true;
+      startClock();
+      startRateMonitor();
+
+      client.eegStream.subscribe(data => {
+        if (!data) return;
+        // data is an array of samples, each with { O1, O2, T3, T4 } or [o1,o2,t3,t4]
+        const samples = Array.isArray(data) ? data : [data];
+        samples.forEach(s => {
+          const vals = Array.isArray(s)
+            ? { O1: s[0], O2: s[1], T3: s[2], T4: s[3] }
+            : s;
+
+          channels.forEach(ch => {
+            const v = vals[ch] !== undefined ? vals[ch] : (vals[ch.toLowerCase()] || 0);
+            buffers[ch][writePos[ch]] = v;
+            writePos[ch] = (writePos[ch] + 1) % bufferSize;
+            updateRMS(ch, v);
+          });
+          sampleTotal++;
+          samplesInWindow++;
+          document.getElementById('sampleCount').textContent = sampleTotal;
+
+          // Update live value displays
+          const last = samples[samples.length-1];
+          channels.forEach(ch => {
+            const v = last[ch] !== undefined ? last[ch] : 0;
+            document.getElementById('val' + ch).textContent = (v * 1e6).toFixed(2) + ' µV';
+          });
+        });
+      });
+
+    } catch(e) {
+      alert('Failed to start EEG: ' + e.message);
+    }
+  } else {
+    try {
+      await client.stopEEGStream();
+      eegStreaming = false;
+      clearInterval(sessionTimer);
+      clearInterval(rateTimer);
+    } catch(e) { /* ignore */ }
+  }
+
+  btn.disabled = false;
+  updateEEGButton();
+});
+
+function updateEEGButton() {
+  const btn = document.getElementById('btnEEG');
+  btn.textContent = eegStreaming ? '⏹ Stop EEG' : '▶ Start EEG';
+}
+
+// ── DISCONNECT ────────────────────────────────────────────
+document.getElementById('btnDisconnect').addEventListener('click', async () => {
+  if (!client) return;
+  try {
+    if (eegStreaming) await client.stopEEGStream();
+    // BrainbitClient doesn't expose explicit disconnect in SDK1 web, 
+    // but we can reset state
+    clearInterval(sessionTimer);
+    clearInterval(rateTimer);
+    eegStreaming = false;
+    client = null;
+    ['btnEEG','btnDisconnect','btnMarker','qm1','qm2','qm3','qm4','qm5']
+      .forEach(id => document.getElementById(id).disabled = true);
+    document.getElementById('statusDot').className = 'status-dot';
+    document.getElementById('statusLabel').textContent = 'Disconnected';
+    document.getElementById('sessionClock').textContent = '00:00';
+    // re-show overlay
+    const overlay = document.getElementById('overlay');
+    overlay.style.display = '';
+    overlay.classList.remove('hidden');
+    document.getElementById('btnConnect').disabled = false;
+    document.getElementById('connectMsg').textContent = '';
+  } catch(e) { /* ignore */ }
+});
+
+// ── MARKERS ───────────────────────────────────────────────
+function injectMarker() {
+  const input = document.getElementById('markerInput');
+  const label = input.value.trim() || 'EVENT';
+  if (!client) return;
+  client.injectMarker(label);
+  input.value = '';
+  logMarker(label);
+}
+
+function injectQuickMarker(label) {
+  if (!client) return;
+  client.injectMarker(label);
+  logMarker(label);
+}
+
+function logMarker(label, ts) {
+  const elapsed = sessionStart
+    ? Math.floor((Date.now() - sessionStart) / 1000)
+    : 0;
+  const m = String(Math.floor(elapsed/60)).padStart(2,'0');
+  const s = String(elapsed%60).padStart(2,'0');
+  const timeStr = ts
+    ? new Date(ts).toLocaleTimeString()
+    : m + ':' + s;
+
+  markerCount++;
+  document.getElementById('markerCount').textContent = markerCount;
+
+  const log = document.getElementById('markerLog');
+  const entry = document.createElement('div');
+  entry.className = 'marker-entry';
+  entry.innerHTML = `<span class="marker-time">${timeStr}</span><span class="marker-text">${label}</span>`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+// keyboard shortcut: Enter to inject marker
+document.getElementById('markerInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') injectMarker();
+});
+
+// ── GAIN / SWEEP CONTROLS ─────────────────────────────────
+document.getElementById('gainSlider').addEventListener('input', function() {
+  gain = parseFloat(this.value);
+  document.getElementById('gainVal').textContent = gain;
+});
+
+document.getElementById('sweepSlider').addEventListener('input', function() {
+  sweepSec = parseInt(this.value);
+  document.getElementById('sweepVal').textContent = sweepSec + 's';
+  initBuffers();
+});
+</script>
+</body>
+</html>
